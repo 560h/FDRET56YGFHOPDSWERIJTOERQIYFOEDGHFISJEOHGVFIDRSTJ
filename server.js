@@ -1,31 +1,40 @@
 const express = require('express');
-const axios = require('axios');
-const app = express();
+const fetch = require('node-fetch');
 const path = require('path');
-const os = require('os');
 
-app.use(express.static('public'));
+const app = express();
+const port = process.env.PORT || 3000;
+const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    console.log(`Received connection from IP: ${ip}`);
+
+    if (webhookUrl) {
+        fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                content: `New connection from IP: \`${ip}\``,
+            }),
+        })
+        .then(response => {
+            if (!response.ok) {
+                console.error(`Failed to send webhook: ${response.status} ${response.statusText}`);
+            }
+        })
+        .catch(error => console.error('Error sending webhook:', error));
+    } else {
+        console.warn('DISCORD_WEBHOOK_URL environment variable is not set.');
+    }
+
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/track', (req, res) => {
-  const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  const webhookUrl = 'https://discordapp.com/api/webhooks/1368358386571280435/kLO9BC2RFtV8M0lkCz57upHFFgcmDlllpn8OUM-jnFLOT9OZPi31SafXHikeg5yTGYnn';
-  const data = {
-    content: `A user clicked on the link. IP address: ${ip}`
-  };
-  
-  axios.post(webhookUrl, data)
-    .then(() => {
-      res.sendFile(path.join(__dirname, 'index.html'));
-    })
-    .catch(error => {
-      console.error('Error sending to webhook:', error);
-      res.status(500).send('Internal Server Error');
-    });
+app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
 });
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
